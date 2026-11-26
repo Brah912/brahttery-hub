@@ -30,6 +30,7 @@
 - El icono puede mostrar **solo el dibujo**, el **porcentaje** o el **tiempo restante** (`45m`, `12h`, `3d`). Cambia de color cuando la batería está baja y muestra un punto verde mientras carga.
 - **Tiempo restante real:** la app aprende cuánto gasta cada periférico *mientras lo usas* y recalcula su consumo una vez al día.
 - **Ventana para personalizar** cada periférico: modelo (19 diseños de ratones, teclados, cascos, auriculares, mandos y altavoces), estilo realista o minimalista, colores, nombre, símbolo o imagen propia.
+- **Ficha de especificaciones** de cada periférico (sensor, DPI, peso, drivers…) y **notas de modificaciones**, con un resumen en su tarjeta.
 - Temas **Claro, Gris y Oscuro**, con opacidad ajustable.
 - **Se actualiza sola** al abrirla y arranca con Windows en segundo plano.
 
@@ -76,7 +77,7 @@ Listo: aparecen sus iconos junto al reloj y se abre la ventana.
 
 ### Actualizar
 
-No hay que hacer nada: al abrir la ventana, la app comprueba si hay una versión nueva. Si la hay, la descarga, la verifica, se cierra y se vuelve a abrir actualizada. Tus ajustes no se tocan. Se puede desactivar en la pestaña **Actualizaciones**, donde además están las notas de cada versión.
+No hay que hacer nada: al abrir la ventana, la app comprueba si hay una versión nueva. Si la hay, descarga el instalador, lo verifica y lo ejecuta en silencio: cierra la app, reemplaza sus archivos y la vuelve a abrir actualizada, en unos segundos. Tus ajustes no se tocan. Se puede desactivar en la pestaña **Actualizaciones**, donde además están las notas de cada versión.
 
 ### Desinstalar
 
@@ -145,7 +146,7 @@ La app **solo** se conecta a GitHub, y **solo** para buscar actualizaciones:
 |---|---|
 | Al abrir la ventana (y al volver a mostrarla si pasó más de 1 hora) | `brahttery-hub.json` de la última versión publicada: número de versión, notas y huella |
 | La bandeja, cada 6 horas | El mismo archivo, para avisarte con una notificación |
-| Solo si hay versión nueva | `Brahttery-hub.exe` y su huella `Brahttery-hub.exe.sha256` |
+| Solo si hay versión nueva | El instalador `Brahttery-hub-Setup.exe` y su huella `.sha256` |
 
 - **No envía nada sobre ti ni sobre tus periféricos.** No hay cuentas, analíticas ni telemetría. Las peticiones son descargas normales de archivos públicos.
 - La versión nueva se **verifica con SHA-256** antes de instalarse. Si la huella no coincide, se descarta.
@@ -162,7 +163,7 @@ Todo en `%APPDATA%\Brahttery hub`:
 | `historial.json` | Niveles de batería con fecha y tiempo de uso (últimos 30 días), para calcular el consumo |
 | `brahttery_hub.log` | Registro de lecturas y errores, útil si algo falla |
 
-El programa se instala en `%LOCALAPPDATA%\Programs\Brahttery hub`.
+El programa se instala en `%LOCALAPPDATA%\Programs\Brahttery hub`: el `.exe` y una carpeta `_internal` con Python y sus librerías.
 
 ### Cambios en Windows
 
@@ -185,17 +186,17 @@ Al desinstalar se quitan el arranque, las preferencias propias y la entrada de A
 
 Windows muestra *"Windows protegió su PC"* con cualquier programa que no tenga una **firma digital de pago** y que todavía haya sido descargado por poca gente. Brahttery hub es un proyecto personal sin firma, por eso aparece el aviso. Pulsa **Más información → Ejecutar de todas formas**.
 
-Algunos antivirus desconfían de los programas hechos con Python y empaquetados en un solo `.exe` (PyInstaller). Es un falso positivo conocido. Si te pasa, restáuralo desde la cuarentena y agrega la carpeta `%LOCALAPPDATA%\Programs\Brahttery hub` como excepción.
+Algunos antivirus desconfían de los programas hechos con Python y empaquetados con PyInstaller. Es un falso positivo conocido. Si te pasa, restáuralo desde la cuarentena y agrega la carpeta `%LOCALAPPDATA%\Programs\Brahttery hub` como excepción.
 
 ### Verificar la descarga
 
 Cada versión publica la huella SHA-256 del programa. Para comprobar que tu copia es la original, abre PowerShell y escribe:
 
 ```powershell
-Get-FileHash "$env:LOCALAPPDATA\Programs\Brahttery hub\Brahttery hub.exe"
+Get-FileHash "$env:USERPROFILE\Downloads\Brahttery-hub-Setup.exe"
 ```
 
-El resultado tiene que ser igual al de `Brahttery-hub.exe.sha256` de la [versión instalada](https://github.com/Brah912/brahttery-hub/releases), y al que aparece al final de sus notas.
+El resultado tiene que ser igual al de `Brahttery-hub-Setup.exe.sha256` de esa [versión](https://github.com/Brah912/brahttery-hub/releases), y al que aparece al final de sus notas.
 
 ### Mi periférico no aparece
 
@@ -205,7 +206,10 @@ El resultado tiene que ser igual al de `Brahttery-hub.exe.sha256` de la [versió
 
 ### ¿Consume muchos recursos?
 
-No. Hace una lectura por minuto (unos 60 ms), un cálculo al día de alrededor de 1 ms, y guarda unos pocos KB. Con la ventana cerrada solo quedan los iconos.
+No. Hace una lectura por minuto (unos 60 ms), un cálculo al día de alrededor de 1 ms, y guarda unos pocos KB.
+
+- **Con la ventana cerrada** solo queda la bandeja: unos **40 MB de RAM**.
+- **Con la ventana abierta:** unos **115 MB**. Si la dejas oculta, a los 10 minutos se cierra sola para liberar esa memoria (se puede desactivar en *General*). El siguiente clic en un icono la vuelve a abrir en un par de segundos.
 
 ---
 
