@@ -1,0 +1,62 @@
+[
+  {
+    "version": "1.4.4",
+    "fecha": "26/11/2026",
+    "notas": "- Aviso de batería baja: notificación de Windows con sonido a elegir (de la app, de Windows o tuyos), volumen y opción de silenciar\n- Tiempo restante más preciso, sobre todo en ratones Logitech\n- La app ya no puede trabar el ratón de la PC al abrirse\n- Cierra sola las bandejas de versiones muy antiguas que quedaban abiertas\n- Informe de diagnóstico más completo"
+  },
+  {
+    "version": "1.4.3",
+    "fecha": "26/11/2026",
+    "notas": "- Cambio de tema casi instantáneo: el fundido al tema nuevo empieza al tocarlo, sin quedarse trabado"
+  },
+  {
+    "version": "1.4.2",
+    "fecha": "26/11/2026",
+    "notas": "- Cambio de tema mucho más rápido y con fundido suave, sin que la ventana se congele\n- Icono propio para el tema Gris: BrH verde sobre gris"
+  },
+  {
+    "version": "1.4.1",
+    "fecha": "26/11/2026",
+    "notas": "- Corregido: si quedaba abierta una copia vieja de la app, los iconos no mostraban el porcentaje ni el tiempo aunque estuvieran elegidos\n- Nuevo botón 'Crear informe de diagnóstico' en Acerca de, para cuando un periférico no aparece o no se lee bien\n- El logo de arriba a la izquierda se ilumina con el color de sus letras al pasar el ratón"
+  },
+  {
+    "version": "1.4.0",
+    "fecha": "26/11/2026",
+    "notas": "- Usa menos memoria RAM: la ventana oculta se cierra sola a los 10 minutos y la app ya no necesita procesos extra\n- Arranca más rápido y el instalador pesa menos\n- Iconos con número: el dibujo se ve entero con el número encima sobre una sombra suave\n- La sección Color quedó debajo de Diseño y la rueda del ratón desplaza más rápido\n- Borra sola los archivos temporales que quedaban al apagar el PC"
+  },
+  {
+    "version": "1.3.4",
+    "fecha": "26/11/2026",
+    "notas": "- Iconos con número: el dibujo se ve entero y más grande, con el número encima sobre una sombra suave\n- La app borra sola los archivos temporales que quedan al apagar el PC con la app abierta"
+  },
+  {
+    "version": "1.3.3",
+    "fecha": "26/11/2026",
+    "notas": "- Especificaciones de cada periférico: ficha propia con los datos que quieras y un resumen en su tarjeta\n- Notas de modificaciones por periférico (etiqueta 'Modificado')\n- Iconos con número rediseñados: cifras redondeadas, dibujo más grande y marco alrededor del número"
+  },
+  {
+    "version": "1.3.2",
+    "fecha": "26/11/2026",
+    "notas": "- Búsqueda de actualizaciones sin el límite de GitHub (evita el error 'GitHub respondió 403')\n- Ajustes menores en la pestaña General"
+  },
+  {
+    "version": "1.3.1",
+    "fecha": "26/11/2026",
+    "notas": "- Corregido: tras actualizarse, la app no podía volver a abrirse sola (error 'Failed to import encodings module')"
+  },
+  {
+    "version": "1.3.0",
+    "fecha": "26/11/2026",
+    "notas": "- Nueva pestaña Actualizaciones: aviso, notas de cada versión y actualización automática al abrir la app\n- Se añade sola al arranque de Windows (se puede desactivar)\n- Los iconos nuevos aparecen directamente en la barra de tareas, no en los ocultos\n- Botones Minimizar (segundo plano) y Cerrar (finaliza la app)\n- Selector de color nuevo, con colores sugeridos y recientes\n- Instalador normal de Windows; se desinstala desde Configuración > Aplicaciones\n- Cerrar la ventana la deja en segundo plano; un clic en cualquier icono de la bandeja la abre\n- Los iconos pueden mostrar el porcentaje o el tiempo restante, con su propio color\n- Tiempo restante calculado con el consumo real de cada periférico (análisis diario)\n- Detecta baterías de cualquier marca: Bluetooth, estándar HID, Logitech y mandos de Xbox\n- Un ratón en reposo ya no desaparece de la bandeja"
+  },
+  {
+    "version": "1.2.0",
+    "fecha": "26/11/2026",
+    "notas": "- Nueva pestaña Actualizaciones: aviso, notas de cada versión y actualización automática al abrir la app\n- Instalador normal de Windows (adiós a los .bat); se desinstala desde Configuración > Aplicaciones\n- Cerrar la ventana la deja en segundo plano; un clic en cualquier icono de la bandeja la abre\n- Los iconos pueden mostrar el porcentaje o el tiempo restante, con su propio color\n- Tiempo restante calculado con el consumo real de cada periférico (análisis diario)\n- Detecta baterías de cualquier marca: Bluetooth, estándar HID, Logitech y mandos de Xbox\n- Un ratón en reposo ya no desaparece de la bandeja"
+  },
+  {
+    "version": "1.1.0",
+    "fecha": "26/11/2026",
+    "notas": "Primera versión con actualizaciones automáticas"
+  }
+]

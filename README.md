@@ -15,6 +15,8 @@
   &nbsp;·&nbsp;
   <a href="#cómo-funciona-por-dentro">Cómo funciona</a>
   &nbsp;·&nbsp;
+  <a href="#código-fuente">Código fuente</a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/Brah912/brahttery-hub/releases">Versiones</a>
 </p>
 
@@ -177,6 +179,34 @@ Todos son del **usuario actual** (`HKEY_CURRENT_USER`) y se pueden deshacer:
 | Aplicaciones instaladas | `…\Uninstall\{B19F4761-…}_is1` | Que aparezca en Configuración → Aplicaciones (lo crea el instalador) |
 
 Al desinstalar se quitan el arranque, las preferencias propias y la entrada de Aplicaciones. La lista de iconos de la bandeja la administra Windows, que descarta los de programas que ya no existen.
+
+## Código fuente
+
+Todo el código de la app está en este repositorio, para que puedas revisar lo que hace.
+
+| Archivo | Qué hace |
+|---|---|
+| `Brahttery hub.pyw` | Punto de entrada: abre la bandeja, o la ventana con `--configurar` |
+| `bandeja.py` | Iconos de la bandeja, menú, lectura cada minuto y aviso de actualizaciones |
+| `ventana.py` | Ventana de personalización (customtkinter) |
+| `dispositivos.py` | Lectores de batería: Bluetooth, HID estándar, Logitech HID++, XInput, HyperX, SCYROX, DualSense |
+| `hid_estandar.py` | Lectura del estándar HID de batería (solo lectura, mediante la API de Windows) |
+| `estimacion.py` | Cálculo del tiempo restante con el consumo real |
+| `apariencia.py`, `modelos.py`, `selector_color.py` | Dibujo de los iconos, los 19 modelos de periféricos y el selector de color |
+| `actualizador.py` | Busca, descarga, verifica (SHA-256) e instala las actualizaciones |
+| `diagnostico.py` | Informe de diagnóstico |
+| `rutas.py` | Versión, carpetas de datos e inicio con Windows |
+| `compilar.ps1`, `instalador.iss`, `publicar.ps1` | Compilar con PyInstaller, crear el instalador (Inno Setup) y publicar una versión |
+
+### Compilarla tú mismo
+
+Necesitas Windows 10/11, [Python 3.12 o más nuevo](https://www.python.org/downloads/) e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (solo para el instalador).
+
+```powershell
+py -m pip install -r requirements.txt pyinstaller
+py "Brahttery hub.pyw"                                      # probarla sin compilar
+powershell -ExecutionPolicy Bypass -File .\compilar.ps1    # crea dist\Brahttery hub\
+```
 
 ---
 

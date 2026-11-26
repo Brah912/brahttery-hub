@@ -1,0 +1,15 @@
+# Compilación
+dist/
+build/
+__pycache__/
+*.spec
+
+# Datos personales de la app (en desarrollo se guardan en %APPDATA%\Brahttery hub)
+config.json
+estado.json
+historial.json
+*.log
+tema_*.png
+
+# Notas personales del autor
+CAMBIOS.md
