@@ -1,5 +1,5 @@
 ﻿# Sube a GitHub el código de la app, en un solo cambio (commit):
-#   - los archivos del desarrollo (lista ARCHIVOS, más abajo), dentro de la carpeta "codigo/",
+#   - los archivos del desarrollo (lista ARCHIVOS, más abajo), dentro de la carpeta "src/" (lo habitual en GitHub),
 #   - la página del repositorio: repo\README.md, repo\.gitignore y las capturas de repo\docs.
 # NO sube datos personales (config.json, estado.json, historial.json, registros), ni CAMBIOS.md,
 # ni las carpetas dist\ y build\.
@@ -27,7 +27,7 @@ $ARCHIVOS = @(
 )
 # (ruta en GitHub -> archivo local)
 $lista = [ordered]@{}
-foreach ($a in $ARCHIVOS) { $lista["codigo/$a"] = "$d\$a" }
+foreach ($a in $ARCHIVOS) { $lista["src/$a"] = "$d\$a" }
 $lista["README.md"] = "$d\repo\README.md"
 $lista[".gitignore"] = "$d\repo\.gitignore"
 foreach ($f in Get-ChildItem "$d\repo\docs" -File) { $lista["docs/$($f.Name)"] = $f.FullName }
@@ -53,9 +53,10 @@ foreach ($ruta in $lista.Keys) {
     Write-Host "  $ruta"
 }
 # Versiones anteriores de este script los subían sueltos en la portada: se borran de ahí.
-$raiz = Invoke-RestMethod "$api/git/trees/$arbolBase" -Headers $cab
+# (y de la carpeta "codigo/", que fue el nombre anterior)
+$raiz = Invoke-RestMethod "$api/git/trees/$arbolBase`?recursive=1" -Headers $cab
 foreach ($e in $raiz.tree) {
-    if ($e.type -eq "blob" -and $ARCHIVOS -contains $e.path) {
+    if ($e.type -eq "blob" -and ($ARCHIVOS -contains $e.path -or $e.path.StartsWith("codigo/"))) {
         $arbol += @{ path = $e.path; mode = "100644"; type = "blob"; sha = $null }
         Write-Host "  (se quita de la portada) $($e.path)"
     }

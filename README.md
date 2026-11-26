@@ -182,7 +182,7 @@ Al desinstalar se quitan el arranque, las preferencias propias y la entrada de A
 
 ## Código fuente
 
-Todo el código de la app está en la carpeta [`codigo`](codigo), para que puedas revisar lo que hace.
+Todo el código de la app está en la carpeta [`src`](src), para que puedas revisar lo que hace.
 
 | Archivo | Qué hace |
 |---|---|
@@ -203,7 +203,7 @@ Todo el código de la app está en la carpeta [`codigo`](codigo), para que pueda
 Necesitas Windows 10/11, [Python 3.12 o más nuevo](https://www.python.org/downloads/) e [Inno Setup 6](https://jrsoftware.org/isinfo.php) (solo para el instalador).
 
 ```powershell
-cd codigo
+cd src
 py -m pip install -r requirements.txt pyinstaller
 py "Brahttery hub.pyw"                                      # probarla sin compilar
 powershell -ExecutionPolicy Bypass -File .\compilar.ps1    # crea dist\Brahttery hub\
