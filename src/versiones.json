@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.4.6",
+    "fecha": "26/11/2026",
+    "notas": ""
+  },
+  {
+    "version": "1.4.5",
+    "fecha": "26/11/2026",
+    "notas": "- Informe de diagnóstico más completo, para agregar periféricos nuevos"
+  },
+  {
     "version": "1.4.4",
     "fecha": "26/11/2026",
     "notas": "- Aviso de batería baja: notificación de Windows con sonido a elegir (de la app, de Windows o tuyos), volumen y opción de silenciar\n- Tiempo restante más preciso, sobre todo en ratones Logitech\n- La app ya no puede trabar el ratón de la PC al abrirse\n- Cierra sola las bandejas de versiones muy antiguas que quedaban abiertas\n- Informe de diagnóstico más completo"

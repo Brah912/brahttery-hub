@@ -2001,7 +2001,7 @@ class App(ctk.CTk):
                      wraplength=700, justify="left").pack(anchor="w", pady=(8, 0))
 
         def crear_informe():
-            b_diag.configure(state="disabled", text="Creando…")
+            b_diag.configure(state="disabled", text="Creando… (puede tardar 2 min)")
             cola: queue.Queue = queue.Queue()
 
             def trabajo():

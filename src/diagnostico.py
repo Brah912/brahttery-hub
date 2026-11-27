@@ -64,6 +64,71 @@ def procesos_app() -> list[tuple[int, str]]:
     return res
 
 
+VIDS_ESCUCHA_LARGA = (0x0951, 0x03F0)   # receptores HyperX (Kingston y HP)
+SEGUNDOS_ESCUCHA_LARGA = 120
+
+
+def _escucha_larga(w, largas) -> None:
+    """Escucha todas las colecciones HyperX a la vez durante 2 minutos (solo lectura).
+    Anota cada mensaje con el segundo en que llegó y vuelve a leer los informes de
+    función cada 15 s para ver si algún byte cambia (por ejemplo, la batería)."""
+    w("")
+    w(f"=== Escucha larga de receptores HyperX ({SEGUNDOS_ESCUCHA_LARGA} s, solo lectura) ===")
+    abiertos = []
+    for vid, pid, c in largas:
+        nombre = f"{vid:04X}:{pid:04X} colección {c['usage_page']:04X}:{c['usage']:04X}"
+        try:
+            h = hid.device()
+            h.open_path(c["path"])
+            h.set_nonblocking(True)
+            abiertos.append((nombre, h, c["path"], [], {}))
+        except (OSError, IOError) as e:
+            w(f"  {nombre}: no se pudo escuchar ({e})")
+    inicio = time.monotonic()
+    proxima_funcion = inicio
+    try:
+        while time.monotonic() - inicio < SEGUNDOS_ESCUCHA_LARGA:
+            hubo = False
+            ahora = time.monotonic()
+            for nombre, h, ruta, mensajes, funciones in abiertos:
+                try:
+                    r = h.read(64)
+                except (OSError, IOError):
+                    r = None
+                if r:
+                    hubo = True
+                    if len(mensajes) < 60:
+                        mensajes.append((ahora - inicio, bytes(r)))
+                if ahora >= proxima_funcion:
+                    try:
+                        v = hid_estandar.volcar_informes(ruta)
+                        for rid, datos in v["funcion"].items():
+                            funciones.setdefault(rid, [])
+                            if not funciones[rid] or funciones[rid][-1][1] != datos:
+                                funciones[rid].append((ahora - inicio, datos))
+                    except Exception:   # noqa: BLE001
+                        pass
+            if ahora >= proxima_funcion:
+                proxima_funcion = ahora + 15
+            if not hubo:
+                time.sleep(0.01)
+    finally:
+        for _, h, *_ in abiertos:
+            try:
+                h.close()
+            except Exception:   # noqa: BLE001
+                pass
+    for nombre, _, _, mensajes, funciones in abiertos:
+        w(f"  {nombre}: {len(mensajes)} mensajes")
+        for t, k in mensajes:
+            w(f"      [{t:6.1f} s] {_hex(k)}")
+        for rid, cambios in funciones.items():
+            estado = "sin cambios" if len(cambios) == 1 else f"{len(cambios) - 1} cambios"
+            w(f"      función id {rid}: {estado}")
+            for t, datos in cambios:
+                w(f"      [{t:6.1f} s] {_hex(datos)}")
+
+
 def _hex(b: bytes, maximo: int = 64) -> str:
     texto = b[:maximo].hex(" ")
     return texto + (" …" if len(b) > maximo else "")
@@ -203,6 +268,47 @@ def generar() -> str:
                             w(f"      {tipo} id {rid}: {_hex(datos)}")
                 except Exception as e:
                     w(f"      (no se pudo leer: {e!r})")
+
+    w("")
+    w("=== Lo que envían solos los receptores (escucha de 4 s cada uno, solo lectura) ===")
+    w("  (muchos auriculares mandan su batería cada pocos segundos sin que se la pidan)")
+    conocidos = {(0x03F0, 0x05B7), (0x3554, 0xF5F7), (0x3554, 0xF5F6)}
+    escuchadas = 0
+    largas = []
+    for (vid, pid), cols in sorted(por_disp.items()):
+        if (vid, pid) in conocidos or escuchadas >= 6:
+            continue
+        for c in cols:
+            if c["usage_page"] < 0xFF00:
+                continue
+            if vid in VIDS_ESCUCHA_LARGA:
+                largas.append((vid, pid, c))
+                continue
+            escuchadas += 1
+            vistos: dict[bytes, int] = {}
+            try:
+                h = hid.device()
+                h.open_path(c["path"])
+                h.set_nonblocking(True)
+                fin = time.monotonic() + 4
+                while time.monotonic() < fin:
+                    r = h.read(64)
+                    if r:
+                        k = bytes(r)
+                        vistos[k] = vistos.get(k, 0) + 1
+                    else:
+                        time.sleep(0.01)
+                h.close()
+            except (OSError, IOError) as e:
+                w(f"  {vid:04X}:{pid:04X} colección {c['usage_page']:04X}:{c['usage']:04X}: no se pudo escuchar ({e})")
+                continue
+            w(f"  {vid:04X}:{pid:04X} colección {c['usage_page']:04X}:{c['usage']:04X}: "
+              f"{sum(vistos.values())} mensajes, {len(vistos)} distintos")
+            for k, n in list(vistos.items())[:12]:
+                w(f"      x{n}: {_hex(k)}")
+
+    if largas:
+        _escucha_larga(w, largas)
 
     w("")
     w("=== Bluetooth con batería ===")
