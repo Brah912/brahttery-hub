@@ -1,5 +1,10 @@
 [
   {
+    "version": "2.0.1",
+    "fecha": "27/11/2026",
+    "notas": "- Ratones LAMZU (como el Maya X 8K): ahora se ve su batería y si está cargando.\n- Botón «Actualizar» arriba a la derecha: vuelve a leer todos los periféricos al instante, por si algo quedó trabado.\n- Transición más suave al cambiar de página.\n- Informe de diagnóstico: barra de progreso mientras se crea."
+  },
+  {
     "version": "2.0.0",
     "fecha": "26/11/2026",
     "notas": "- Nueva pestaña Rendimiento: procesador, placa de video, memoria RAM y discos en vivo, con colores fáciles de entender (verde: bajo consumo, amarillo: normal, naranja: alto). Muestra el modelo de cada componente, la velocidad del procesador, la temperatura de la placa de video (NVIDIA) y el espacio libre de cada disco.\n- Polling rate de los ratones: la app muestra los Hz de tu ratón (en Logitech los consulta al ratón; en otras marcas los mide mientras la ventana está abierta y movés el ratón) y avisa si está en 2000 Hz o más.\n- El tiempo restante de batería tiene en cuenta el polling rate: a 8000 Hz la batería dura unas 5 veces menos que a 1000 Hz.\n- Cálculo de autonomía más preciso: una sola medición corta ya no pesa de más.\n- Informe de diagnóstico más completo para auriculares HyperX."

@@ -679,6 +679,14 @@ class Bandeja:
                     self._probar_aviso()
                 if self.por_mostrar:
                     self._mostrar_pendientes()
+                if os.path.exists(rutas.RUTA_PEDIR_LECTURA):   # botón «Actualizar» de la ventana
+                    try:
+                        os.remove(rutas.RUTA_PEDIR_LECTURA)
+                    except OSError:
+                        pass
+                    log("Lectura pedida desde la ventana")
+                    self.sincronizar(forzar=True)
+                    self.evento_leer.set()
                 tema = tema_claro()
                 mtime = self._mtime_config()
                 if mtime != self.cfg_mtime:          # cambios desde la ventana de personalización

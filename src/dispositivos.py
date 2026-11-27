@@ -285,7 +285,7 @@ def leer_dualsense() -> list[Dispositivo]:
 # Estándar HID (cualquier marca)
 # --------------------------------------------------------------------------
 # Dispositivos que ya tienen un lector propio (no se leen dos veces)
-_PROPIOS = {(0x03F0, 0x05B7), (0x3554, 0xF5F7), (0x3554, 0xF5F6), (0x054C, 0x0CE6), (0x054C, 0x0DF2)}
+_PROPIOS = {(0x373E, 0x001E), (0x373E, 0x001C), (0x03F0, 0x05B7), (0x3554, 0xF5F7), (0x3554, 0xF5F6), (0x054C, 0x0CE6), (0x054C, 0x0DF2)}
 _sin_bateria: set[bytes] = set()     # colecciones cuyo descriptor no declara batería (no cambia)
 
 
@@ -513,9 +513,61 @@ def leer_xinput() -> list[Dispositivo]:
     return res
 
 
+# LAMZU (receptores 373E, protocolo "Aurora"): informe de función de 64 bytes (+ id 0) en la
+# interfaz FFFF:0000. Se pide con SET_FEATURE y se recoge con GET_FEATURE: el byte 0 vale A0
+# mientras el ratón no contesta y A1 cuando ya está la respuesta. Solo consulta, no cambia nada.
+_LAMZU_VID = 0x373E
+_LAMZU_PEDIDOS = (       # (trama sin el id, pos. del eco, eco, pos. estado, pos. %)
+    ([0x00, 0x00, 0x02, 0x02, 0x00, 0x83], 5, 0x83, 6, 7),     # revisión nueva
+    ([0x00, 0x02, 0x8F, 0x01], 2, 0x8F, 4, 5),                 # revisión anterior
+)
+
+
+def _lamzu_consulta(h, trama, pos_eco, eco):
+    h.send_feature_report(bytes([0x00] + trama + [0] * (64 - len(trama))))
+    for _ in range(40):                      # hasta ~0,4 s; si el ratón duerme se queda en A0
+        r = h.get_feature_report(0x00, 65)
+        if len(r) == 65:
+            r = r[1:]
+        if r and r[0] == 0xA1 and len(r) > pos_eco and r[pos_eco] == eco:
+            return r
+        time.sleep(0.01)
+    return None
+
+
+def leer_lamzu() -> list[Dispositivo]:
+    res: list[Dispositivo] = []
+    vistos = set()
+    for info in hid.enumerate(_LAMZU_VID, 0):
+        pid = info["product_id"]
+        if pid in vistos or info["usage_page"] != 0xFFFF or info["usage"] != 0x00:
+            continue
+        vistos.add(pid)
+        h = hid.device()
+        try:
+            h.open_path(info["path"])
+        except OSError:
+            continue
+        try:
+            for trama, pos_eco, eco, pos_estado, pos_pct in _LAMZU_PEDIDOS:
+                r = _lamzu_consulta(h, trama, pos_eco, eco)
+                if r is None or r[pos_pct] > 100:
+                    continue
+                nombre = (info.get("product_string") or "Ratón LAMZU").replace(" Dongle", "").strip()
+                if not nombre.upper().startswith("LAMZU"):
+                    nombre = "LAMZU " + nombre
+                res.append(Dispositivo(f"lamzu:{pid:04x}", nombre, "raton", r[pos_pct], r[pos_estado] == 1,
+                                       ids=((_LAMZU_VID, pid),)))
+                break
+        finally:
+            h.close()
+    return res
+
+
 # Receptores USB propios: si siguen enchufados, el periférico sólo está en reposo (ahorro de
 # energía) y se sigue mostrando con su último valor en vez de darlo por apagado.
-_RECEPTORES = {"scyrox": ((0x3554, 0xF5F7), (0x3554, 0xF5F6)), "hyperx-cloud3": ((0x03F0, 0x05B7),)}
+_RECEPTORES = {"scyrox": ((0x3554, 0xF5F7), (0x3554, 0xF5F6)), "hyperx-cloud3": ((0x03F0, 0x05B7),),
+              "lamzu:001e": ((0x373E, 0x001E),)}
 
 
 def receptor_presente(clave: str) -> bool:
@@ -523,7 +575,7 @@ def receptor_presente(clave: str) -> bool:
 
 
 ORDEN_TIPOS = ("raton", "teclado", "cascos", "auriculares", "mando", "altavoz", "otro")
-LECTORES = [leer_hyperx_cloud3, leer_scyrox, leer_dualsense, leer_logitech, leer_hid_estandar, leer_xinput,
+LECTORES = [leer_hyperx_cloud3, leer_scyrox, leer_lamzu, leer_dualsense, leer_logitech, leer_hid_estandar, leer_xinput,
             leer_bluetooth]
 
 

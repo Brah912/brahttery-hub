@@ -13,7 +13,7 @@ import winreg
 
 NOMBRE = "Brahttery hub"
 ID = "BrahtteryHub"                       # clave de registro, mutex y clase de ventana
-VERSION = "2.0.0"                         # súbela antes de publicar una actualización
+VERSION = "2.0.1"                         # súbela antes de publicar una actualización
 # Repositorio de GitHub donde se publican las versiones ("usuario/repositorio").
 # Vacío = la app no busca actualizaciones.
 REPO_ACTUALIZACIONES = "Brah912/brahttery-hub"
@@ -26,6 +26,7 @@ os.makedirs(DATOS, exist_ok=True)
 
 RUTA_CONFIG = os.path.join(DATOS, "config.json")
 RUTA_ESTADO = os.path.join(DATOS, "estado.json")
+RUTA_PEDIR_LECTURA = os.path.join(DATOS, "pedir_lectura")   # la ventana pide leer ya
 RUTA_HISTORIAL = os.path.join(DATOS, "historial.json")
 RUTA_LOG = os.path.join(DATOS, "brahttery_hub.log")
 

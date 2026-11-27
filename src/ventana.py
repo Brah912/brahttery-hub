@@ -14,6 +14,7 @@ import queue
 import re
 import sys
 import threading
+import math
 import time
 from ctypes import wintypes as wt
 import tkinter
@@ -793,7 +794,13 @@ class App(ctk.CTk):
         self.b_adelante = ctk.CTkButton(nav, text="›", command=self.adelante, **estilo)
         self.b_adelante.pack(side="left", padx=(2, 0))
         self.l_actualizado = ctk.CTkLabel(barra, text="", font=fuente(12), text_color=P["SECUNDARIO"])
-        self.l_actualizado.grid(row=0, column=4, padx=22)
+        self.l_actualizado.grid(row=0, column=4, padx=(22, 8))
+        self.b_refrescar = ctk.CTkButton(barra, text="⟳  Actualizar", width=110, height=32, corner_radius=10,
+                                         font=fuente(13), fg_color=P["SUPERFICIE"],
+                                         hover_color=P["SUPERFICIE_HOVER"], border_width=1,
+                                         border_color=P["BORDE"], text_color=P["TEXTO"],
+                                         text_color_disabled=P["APAGADO"], command=self.pedir_lectura)
+        self.b_refrescar.grid(row=0, column=5, padx=(0, 18))
         self._texto_actualizado()
         self._pintar_nav()
 
@@ -865,9 +872,71 @@ class App(ctk.CTk):
         # Las páginas se apilan una encima de otra y solo se trae al frente la elegida: así no se
         # recoloca nada al cambiar de pestaña (ocultar y volver a mostrar obliga a redibujar todo).
         pagina = self._paginas[clave]
+        anterior = getattr(self, "_pagina_frente", None)
+        self._pagina_frente = pagina
+        cubierta = None
+        if anterior is not None and anterior is not pagina and anterior.winfo_exists() and self.winfo_viewable():
+            cubierta = self._cubrir_principal()
         if not pagina.winfo_manager():
             pagina.place(x=0, y=0, relwidth=1, relheight=1)
         pagina.lift()
+        if cubierta is not None:
+            self._transicion_pagina(pagina, cubierta)
+
+    def _cubrir_principal(self):
+        """Foto de la página actual puesta encima del área de contenido, para fundirla con la nueva."""
+        viejo = getattr(self, "_cubierta_pagina", None)
+        if viejo is not None:
+            try:
+                viejo.destroy()
+            except Exception:
+                pass
+        foto = capturar_ventana(self)
+        if foto is None:
+            return None
+        try:
+            from PIL import ImageTk
+            x = self.principal.winfo_rootx() - self.winfo_rootx()
+            y = self.principal.winfo_rooty() - self.winfo_rooty()
+            w, h = self.principal.winfo_width(), self.principal.winfo_height()
+            foto = foto.crop((x, y, x + w, y + h))
+            cubierta = tkinter.Toplevel(self)
+            cubierta.overrideredirect(True)
+            cubierta.geometry(f"{w}x{h}+{self.principal.winfo_rootx()}+{self.principal.winfo_rooty()}")
+            cubierta.transient(self)
+            cubierta._foto = ImageTk.PhotoImage(foto, master=cubierta)
+            tkinter.Label(cubierta, image=cubierta._foto, bd=0, highlightthickness=0).pack()
+            cubierta.update_idletasks()
+            self._cubierta_pagina = cubierta
+            return cubierta
+        except Exception:
+            return None
+
+    def _transicion_pagina(self, pagina, cubierta, pasos: int = 10) -> None:
+        """La página vieja se desvanece mientras la nueva sube unos píxeles hasta su sitio (~0,2 s)."""
+        desplazamiento = 14
+        pagina.place_configure(y=desplazamiento)
+
+        def paso(i=1):
+            t = i / pasos
+            suave = 1 - (1 - t) ** 3                     # rápido al principio, se posa despacio
+            try:
+                cubierta.attributes("-alpha", 1 - suave)
+                pagina.place_configure(y=round(desplazamiento * (1 - suave)))
+            except Exception:
+                pagina.place_configure(y=0)
+                return
+            if i < pasos:
+                self.after(16, paso, i + 1)
+            else:
+                pagina.place_configure(y=0)
+                try:
+                    cubierta.destroy()
+                except Exception:
+                    pass
+                if getattr(self, "_cubierta_pagina", None) is cubierta:
+                    self._cubierta_pagina = None
+        paso()
 
     def _ensuciar(self, *claves: str) -> None:
         self._sucias.update(claves)
@@ -918,11 +987,34 @@ class App(ctk.CTk):
             img = Image.merge("RGBA", (*[img.convert("L")] * 3, alfa)).filter(ImageFilter.GaussianBlur(tam * 0.035))
         return ctk.CTkImage(img, size=(tam, tam))
 
+    def pedir_lectura(self) -> None:
+        """Le pide a la bandeja que vuelva a leer todo ya y rehaga sus iconos (por si algo quedó trabado)."""
+        try:
+            with open(rutas.RUTA_PEDIR_LECTURA, "w", encoding="utf-8") as f:
+                f.write("1")
+        except OSError:
+            return
+        hora_antes = self.estado.get("hora")
+        self.b_refrescar.configure(state="disabled", text="Leyendo…")
+
+        def esperar(intentos: int = 0) -> None:
+            listo = ap.cargar_estado().get("hora") != hora_antes
+            if listo or intentos > 60:      # hasta ~15 s
+                self.b_refrescar.configure(state="normal", text="⟳  Actualizar")
+                self._vigilar_estado_una_vez()
+                return
+            self.after(250, lambda: esperar(intentos + 1))
+        self.after(250, esperar)
+
     def _texto_actualizado(self) -> None:
         hora = self.estado.get("hora")
         self.l_actualizado.configure(text=f"Última lectura {hace(hora)}" if hora else "Bandeja sin iniciar")
 
     def _vigilar_estado(self) -> None:
+        self._vigilar_estado_una_vez()
+        self.after(5000, self._vigilar_estado)
+
+    def _vigilar_estado_una_vez(self) -> None:
         self.estado = ap.cargar_estado()
         self.est.recargar_si_cambio()
         try:
@@ -938,7 +1030,6 @@ class App(ctk.CTk):
                 self._ensuciar("perifericos")
                 if self.vista == "perifericos" and not self._oculta:    # oculta: se rehace al mostrarla
                     self.ver_perifericos()
-        self.after(5000, self._vigilar_estado)
 
     # ============================================ segundo plano (ocultar / mostrar)
     def _crear_eventos(self) -> None:
@@ -2181,9 +2272,15 @@ class App(ctk.CTk):
                                "y el registro de errores. No incluye datos personales y no le envía nada a ningún "
                                "dispositivo: solo lee.", font=fuente(12), text_color=P["SECUNDARIO"],
                      wraplength=700, justify="left").pack(anchor="w", pady=(8, 0))
+        barra_diag = ctk.CTkProgressBar(sec, width=460, height=6, corner_radius=3,
+                                        fg_color=P["BORDE"], progress_color=P["ACENTO"])
 
         def crear_informe():
             b_diag.configure(state="disabled", text="Creando… (puede tardar 2 min)")
+            l_diag.configure(text="")
+            barra_diag.set(0)
+            barra_diag.pack(anchor="w", pady=(10, 0))
+            inicio = time.monotonic()
             cola: queue.Queue = queue.Queue()
 
             def trabajo():
@@ -2198,8 +2295,13 @@ class App(ctk.CTk):
                 try:
                     tipo, dato = cola.get_nowait()
                 except queue.Empty:
+                    t = time.monotonic() - inicio
+                    barra_diag.set(min(0.97, 1 - math.exp(-t / 50)))
+                    l_diag.configure(text=f"{int(t)} s")
                     self.after(150, esperar)
                     return
+                barra_diag.set(1)
+                self.after(800, barra_diag.pack_forget)
                 b_diag.configure(state="normal", text="Crear informe de diagnóstico")
                 if tipo == "ok":
                     l_diag.configure(text="Listo: se abrió la carpeta con «diagnostico.txt»", text_color=P["SECUNDARIO"])
