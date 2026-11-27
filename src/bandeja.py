@@ -27,6 +27,7 @@ import apariencia as ap  # noqa: E402
 import dispositivos  # noqa: E402
 import rutas  # noqa: E402
 import notificaciones  # noqa: E402
+import polling  # noqa: E402
 import sonidos  # noqa: E402
 from estimacion import Estimador, formato_horas  # noqa: E402
 
@@ -268,9 +269,11 @@ def texto_tooltip(d: dispositivos.Dispositivo, ajustes: dict, est: Estimador) ->
     if d.cargando:
         linea = f"{d.bateria} % · cargando"
     else:
-        horas, medido = est.horas(d.clave, d.tipo, d.bateria, ajustes.get("autonomia"))
+        horas, medido = est.horas(d.clave, d.tipo, d.bateria, ajustes.get("autonomia"), d.hz)
         linea = f"{d.bateria} % · quedan ~{formato_horas(horas)}"
         linea += "" if medido else " (aprox.)"
+    if d.hz:
+        linea += f"\n{d.hz} Hz"
     if d.en_reposo:
         linea += "\nEn reposo (último valor leído)"
     return f"{ajustes.get('nombre') or d.nombre}\n{linea}"[:127]
@@ -310,6 +313,7 @@ class Bandeja:
         self.hwnd = user32.CreateWindowExW(WS_EX_TOOLWINDOW, NOMBRE_APP, f"{NOMBRE_APP} {rutas.VERSION}", WS_POPUP,
                                            0, 0, 0, 0, None, None, hinst, None)
         user32.SetTimer(self.hwnd, 1, 1000, None)      # vigilar config.json y el tema claro/oscuro
+        self.hz_avisado: dict[str, int] = {}
         self.novedad = None                             # versión nueva publicada (si la hay)
         self.avisado: dict[str, str] = {}               # clave -> "baja"/"critico" ya avisado
         self.avisos: list = []                          # avisos pendientes de mostrar (hilo principal)
@@ -357,6 +361,19 @@ class Bandeja:
         if self.avisos:
             user32.PostMessageW(self.hwnd, WM_AVISO, 0, 0)
 
+    def _revisar_hz(self, d) -> None:
+        """Avisa (una vez por cambio) cuando un ratón pasa a 2000 Hz o más."""
+        if not d.hz:
+            return
+        previo = self.hz_avisado.get(d.clave, (self.conocidos.get(d.clave) or {}).get("hz_avisado"))
+        if d.hz == previo:
+            return
+        self.hz_avisado[d.clave] = d.hz
+        self.conocidos.setdefault(d.clave, {})["hz_avisado"] = d.hz
+        if d.hz >= polling.ALTO and ap.global_(self.cfg, "avisos_bateria"):
+            self.avisos.append((d, "hz"))
+            user32.PostMessageW(self.hwnd, WM_AVISO, 0, 0)
+
     def _mostrar_avisos(self) -> None:
         while self.avisos:
             d, nivel = self.avisos.pop(0)
@@ -367,11 +384,17 @@ class Bandeja:
             return
         a = self._ajustes(d)
         nombre = a.get("nombre") or d.nombre
-        if nivel == "prueba":
+        if nivel == "hz":
+            horas, _ = self.est.horas(d.clave, d.tipo, d.bateria, a.get("autonomia"), d.hz)
+            titulo = f"{nombre}: polling rate en {d.hz} Hz"
+            texto = (f"A {d.hz} Hz {polling.texto_efecto(d.hz)}. Con {d.bateria} % quedan unas "
+                     f"{formato_horas(horas)} de uso. Si no lo necesitás, bajalo a 1000 Hz desde el "
+                     f"programa del ratón.")
+        elif nivel == "prueba":
             titulo = f"{nombre}: batería baja (prueba)"
             texto = "Así se verá el aviso cuando un periférico se esté quedando sin batería."
         else:
-            horas, _ = self.est.horas(d.clave, d.tipo, d.bateria, a.get("autonomia"))
+            horas, _ = self.est.horas(d.clave, d.tipo, d.bateria, a.get("autonomia"), d.hz)
             titulo = f"{nombre}: batería {'crítica' if nivel == 'critico' else 'baja'}"
             texto = (f"Queda {d.bateria} % (unas {formato_horas(horas)} de uso). "
                      f"{'Cárgalo ya.' if nivel == 'critico' else 'Ponlo a cargar cuando puedas.'}")
@@ -390,7 +413,7 @@ class Bandeja:
             nid.szInfoTitle, nid.szInfo = titulo[:63], texto[:255]
             ok = shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(nid))
         try:
-            if not ap.global_(self.cfg, "aviso_silencio"):
+            if nivel != "hz" and not ap.global_(self.cfg, "aviso_silencio"):
                 sonidos.reproducir(ap.global_(self.cfg, "sonido_aviso"), ap.global_(self.cfg, "volumen_aviso"))
         except Exception:
             log(traceback.format_exc())
@@ -434,8 +457,13 @@ class Bandeja:
             log(e)
         ahora = time.time()
         for d in datos:
+            if d.tipo == "raton" and d.hz is None:
+                d.hz = polling.para(d.ids) if d.ids else None     # lo mide la ventana
+                if d.hz is None:                     # último valor conocido (sin mover el ratón no se mide)
+                    d.hz = (self.conocidos.get(d.clave) or {}).get("hz")
             self.vistos[d.clave] = (d, ahora)
-            self.est.registrar(d.clave, d.bateria, d.cargando, ahora)
+            self.est.registrar(d.clave, d.bateria, d.cargando, ahora, d.hz)
+            self._revisar_hz(d)
         if self.est.toca_analizar(ahora):       # una vez al día: perfil de consumo de cada uno
             try:
                 self.est.analizar(ahora)
@@ -469,6 +497,8 @@ class Bandeja:
                 continue
             self.conocidos[d.clave] = {"nombre": d.nombre, "tipo": d.tipo, "bateria": d.bateria,
                                        "cargando": d.cargando, "visto": ahora}
+            if d.hz:
+                self.conocidos[d.clave].update(hz=d.hz, hz_exacto=d.hz_exacto)
         try:    # Bluetooth emparejados y apagados: Windows guarda su última batería
             for d in dispositivos.leer_bluetooth_desconectados():
                 previo = self.conocidos.get(d.clave)
@@ -505,7 +535,7 @@ class Bandeja:
         for d in visibles:
             ajustes = self._ajustes(d)
             tip = texto_tooltip(d, ajustes, self.est)
-            horas, _ = self.est.horas(d.clave, d.tipo, d.bateria, ajustes.get("autonomia"))
+            horas, _ = self.est.horas(d.clave, d.tipo, d.bateria, ajustes.get("autonomia"), d.hz)
             texto = ap.texto_icono(self.cfg, ajustes, d.bateria, d.cargando, horas)
             firma = (d.tipo, d.bateria, d.cargando, self.tema, tam, tip, texto, self.cfg_mtime)
             previo = self.iconos.get(d.clave)

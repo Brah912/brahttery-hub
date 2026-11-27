@@ -39,6 +39,9 @@ class Dispositivo:
     bateria: int      # 0-100
     cargando: bool = False
     en_reposo: bool = False   # no respondió ahora: se muestra su último valor
+    ids: tuple = ()           # ((vid, pid), ...) USB del receptor/dispositivo, para medir su polling rate
+    hz: int | None = None     # polling rate (Hz), si se conoce
+    hz_exacto: bool = False   # True: lo dijo el propio ratón; False: medido
 
 
 def tipo_por_nombre(nombre: str) -> str:
@@ -233,7 +236,8 @@ def leer_scyrox() -> list[Dispositivo]:
             r = _leer_respuesta(h, [0x08, 0x04])
             if not r:
                 continue
-            return [Dispositivo("scyrox", "Ratón SCYROX", "raton", min(r[6], 100), por_cable or r[7] == 1)]
+            return [Dispositivo("scyrox", "Ratón SCYROX", "raton", min(r[6], 100), por_cable or r[7] == 1,
+                                ids=((0x3554, 0xF5F7), (0x3554, 0xF5F6)))]
         finally:
             h.close()
     return []
@@ -321,7 +325,7 @@ def leer_hid_estandar() -> list[Dispositivo]:
             nombre = (d["product_string"] or lec.producto or f"Dispositivo {vid:04X}:{pid:04X}").strip()
             tipo = _tipo_por_colecciones({(c["usage_page"], c["usage"]) for c in cols}, nombre)
             res.append(Dispositivo(f"hid:{vid:04x}{pid:04x}:{serie or ''}", nombre, tipo, lec.bateria,
-                                   lec.cargando))
+                                   lec.cargando, ids=((vid, pid),)))
             break
     return res
 
@@ -389,6 +393,24 @@ def _logi_bateria(h, idx: int) -> tuple[int, bool, bool] | None:
     return None
 
 
+_LOGI_HZ_EXT = (125, 250, 500, 1000, 2000, 4000, 8000)     # índices de 0x8061 (8 ms … 125 µs)
+
+
+def _logi_hz(h, idx: int) -> int | None:
+    """Polling rate que tiene configurado el ratón (solo se consulta; nunca se cambia)."""
+    f = _logi_indice(h, idx, 0x8061)                       # Extended Adjustable Report Rate (2K/4K/8K)
+    if f:
+        r = _logi_pedir(h, idx, f, 2)                      # getReportRate -> índice
+        if r and r[0] < len(_LOGI_HZ_EXT):
+            return _LOGI_HZ_EXT[r[0]]
+    f = _logi_indice(h, idx, 0x8060)                       # Adjustable Report Rate
+    if f:
+        r = _logi_pedir(h, idx, f, 1)                      # getReportRate -> milisegundos
+        if r and 1 <= r[0] <= 8:
+            return round(1000 / r[0])
+    return None
+
+
 def _logi_nombre_tipo(h, idx: int) -> tuple[str, str]:
     f = _logi_indice(h, idx, 0x0005)                       # Device Name & Type
     if not f:
@@ -447,7 +469,9 @@ def leer_logitech() -> list[Dispositivo]:
                 nombre, tipo = _logi_nombre_tipo(h, idx)
                 clave = "logi:" + re.sub(r"[^a-z0-9]+", "-", nombre.lower()).strip("-")
                 nivel = _suavizar_voltaje(clave, bat[0], bat[1]) if bat[2] else bat[0]
-                res[clave] = Dispositivo(clave, nombre, tipo, max(0, min(100, nivel)), bat[1])
+                hz = _logi_hz(h, idx) if tipo == "raton" else None
+                res[clave] = Dispositivo(clave, nombre, tipo, max(0, min(100, nivel)), bat[1],
+                                         ids=((0x046D, d["product_id"]),), hz=hz, hz_exacto=hz is not None)
         finally:
             h.close()
     return list(res.values())

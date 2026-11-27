@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 4, 6, 0),
-    prodvers=(1, 4, 6, 0),
+    filevers=(2, 0, 0, 0),
+    prodvers=(2, 0, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,8 +16,8 @@ VSVersionInfo(
         StringStruct('ProductName', 'Brahttery hub'),
         StringStruct('InternalName', 'Brahttery hub'),
         StringStruct('OriginalFilename', 'Brahttery hub.exe'),
-        StringStruct('FileVersion', '1.4.6'),
-        StringStruct('ProductVersion', '1.4.6')
+        StringStruct('FileVersion', '2.0.0'),
+        StringStruct('ProductVersion', '2.0.0')
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [0x0C0A, 1200])])

@@ -420,8 +420,25 @@ class App(ctk.CTk):
         self._atajos_navegacion()
         self._crear_eventos()
         self.after(3000, self._vigilar_estado)
+        self.after(2000, self._iniciar_hz)
         self.after(700, self._precargar)
         self.after(1500, lambda: self.buscar_actualizacion(auto=True))   # al abrir: se actualiza sola
+
+    def _iniciar_hz(self) -> None:
+        """Mide el polling rate de los ratones mientras la ventana está adelante (Windows 11 frena
+        el Raw Input de los programas en segundo plano, por eso no lo hace la bandeja)."""
+        import polling
+        self._hz = polling.medidor_propio()
+        if self._hz is not None:
+            self._tic_hz()
+
+    def _tic_hz(self) -> None:
+        import polling
+        try:
+            self._hz.tic(polling.en_primer_plano())
+        except Exception as e:      # noqa: BLE001
+            print(f"Polling: {e!r}")
+        self.after(1000, self._tic_hz)
 
     def _precargar(self) -> None:
         """Construye (ocultas) las páginas que faltan, una por turno, para que la primera visita sea
@@ -495,7 +512,7 @@ class App(ctk.CTk):
                     self.ver_perifericos()
             else:
                 {"perifericos": self.ver_perifericos, "general": self.ver_general,
-                 "actualizaciones": self.ver_actualizaciones,
+                 "actualizaciones": self.ver_actualizaciones, "rendimiento": self.ver_rendimiento,
                  "acerca": self.ver_acerca}.get(vista, self.ver_perifericos)()
         finally:
             self._navegando = False
@@ -788,6 +805,7 @@ class App(ctk.CTk):
         self.nav: dict[str, ctk.CTkButton] = {}
         for fila, (clave, texto, glifo, cmd) in enumerate([
             ("perifericos", "Periféricos", "E772", self.ver_perifericos),
+            ("rendimiento", "Rendimiento", "E9D9", self.ver_rendimiento),
             ("general", "General", "E713", self.ver_general),
             ("actualizaciones", "Actualizaciones", "E895", self.ver_actualizaciones),
             ("acerca", "Acerca de", "E946", self.ver_acerca),
@@ -1086,8 +1104,10 @@ class App(ctk.CTk):
         elif cargando:
             pie = "Cargando"
         else:
-            horas, medido = self.est.horas(clave, d.get("tipo", "otro"), nivel, a.get("autonomia"))
+            horas, medido = self.est.horas(clave, d.get("tipo", "otro"), nivel, a.get("autonomia"), d.get("hz"))
             pie = f"Quedan ~{formato_horas(horas)}" + ("" if medido else " (aprox.)")
+        if d.get("hz"):
+            pie += f"  ·  {d['hz']} Hz"
         ctk.CTkLabel(t, text=pie, font=fuente(12), text_color=c_sec, anchor="w").grid(
             row=5, column=0, columnspan=2, padx=20, pady=(6, 0), sticky="w")
 
@@ -1328,7 +1348,16 @@ class App(ctk.CTk):
             defecto = autonomia_defecto(clave, d.get("tipo", "otro"), self.cfg)
             self.e_ayuda_auto.configure(text=f"Vacío = {defecto:g} h (valor por defecto). Se usa hasta que el "
                                              f"programa mide tu consumo real.")
-            self.e_medicion.configure(text=self.est.resumen(clave))
+            texto = self.est.resumen(clave)
+            if d.get("hz"):
+                import polling
+                origen = "lo informa el ratón" if d.get("hz_exacto") else "medido moviendo el ratón"
+                texto += (f"\nPolling rate: {d['hz']} Hz ({origen}). A esa tasa {polling.texto_efecto(d['hz'])}; "
+                          f"el tiempo restante ya lo tiene en cuenta.")
+            elif d.get("tipo") == "raton":
+                texto += ("\nPolling rate: todavía sin medir. Se mide solo mientras esta ventana está abierta "
+                          "y movés el ratón rápido unos segundos.")
+            self.e_medicion.configure(text=texto)
             self.v_oculto.set(bool(a["oculto"]))
             self._cargar_ficha(d.get("tipo", "otro"), a.get("ficha") or {})
             self.t_notas.delete("1.0", "end")
@@ -1555,7 +1584,7 @@ class App(ctk.CTk):
                     fill=tinta + (255,), anchor="lm")
             x = 130 * k
             for etiqueta, niv, carga in casos:
-                horas, _ = self.est.horas(clave, tipo, niv, a.get("autonomia"))
+                horas, _ = self.est.horas(clave, tipo, niv, a.get("autonomia"), d.get("hz"))
                 texto = ap.texto_icono(self.cfg, a, niv, carga, horas)
                 for t in (32, 16):
                     ic = ap.dibujar_icono(tipo, niv, carga, a, self.cfg, t * k, claro, texto)
@@ -1956,6 +1985,159 @@ class App(ctk.CTk):
         self._ensuciar("perifericos")
 
     # ========================================================= vista: acerca
+    # ------------------------------------------------------------ rendimiento
+    def ver_rendimiento(self) -> None:
+        self._registrar(("rendimiento", None))
+        self.vista = "rendimiento"
+        self._marcar_nav("rendimiento")
+        if not self._hay_pagina("rendimiento"):
+            self._construir_rendimiento()
+        self._mostrar("rendimiento")
+        if not getattr(self, "_rend_activo", False):
+            self._rend_activo = True
+            self._tic_rendimiento()
+
+    def _construir_rendimiento(self) -> None:
+        import rendimiento
+        if getattr(self, "_medidor", None) is None:
+            self._medidor = rendimiento.Medidor()
+        m = self._medidor
+        cont = self._scroll(self._nueva_pagina("rendimiento"))
+        ctk.CTkLabel(cont, text="Rendimiento", font=fuente(22, "bold"), text_color=P["TEXTO"]).pack(
+            anchor="w", padx=28, pady=(24, 2))
+        ctk.CTkLabel(cont, text="Cuánto está trabajando tu PC ahora mismo. Se actualiza cada segundo.",
+                     font=fuente(12), text_color=P["SECUNDARIO"]).pack(anchor="w", padx=28, pady=(0, 6))
+        self._rend = {}
+
+        def medidor(padre, clave, con_temp=False):
+            fila = ctk.CTkFrame(padre, fg_color="transparent")
+            fila.pack(fill="x")
+            num = ctk.CTkLabel(fila, text="–", font=fuente(30, "bold"), text_color=P["TEXTO"], width=110,
+                               anchor="w")
+            num.pack(side="left")
+            der = ctk.CTkFrame(fila, fg_color="transparent")
+            der.pack(side="left", fill="x", expand=True)
+            pastillas = ctk.CTkFrame(der, fg_color="transparent")
+            pastillas.pack(anchor="w")
+            pastilla = ctk.CTkLabel(pastillas, text="", font=fuente(12, "bold"), corner_radius=11, height=24,
+                                    fg_color=P["SUPERFICIE"], text_color="#1b1b1f")
+            pastilla.pack(side="left")
+            temp = None
+            if con_temp:
+                temp = ctk.CTkLabel(pastillas, text="", font=fuente(12, "bold"), corner_radius=11, height=24,
+                                    fg_color=P["SUPERFICIE"], text_color=P["SECUNDARIO"])
+                temp.pack(side="left", padx=(8, 0))
+            expl = ctk.CTkLabel(der, text="", font=fuente(12), text_color=P["SECUNDARIO"], anchor="w")
+            expl.pack(anchor="w", pady=(2, 0))
+            barra = ctk.CTkProgressBar(padre, height=10, corner_radius=5, fg_color=P["PISTA"],
+                                       progress_color=P["ACENTO"])
+            barra.set(0)
+            barra.pack(fill="x", pady=(10, 0))
+            self._rend[clave] = (num, pastilla, expl, barra, temp)
+
+        def detalle(padre, texto):
+            ctk.CTkLabel(padre, text=texto, font=fuente(12, "bold"), text_color=P["TEXTO"], anchor="w",
+                         justify="left", wraplength=700).pack(anchor="w", pady=(0, 8))
+
+        sec = self._seccion(cont, "Procesador", "")
+        nucleos = f" · {m.cpu_nucleos} núcleos, {m.cpu_hilos} hilos" if m.cpu_nucleos else ""
+        detalle(sec, m.cpu_nombre + nucleos)
+        medidor(sec, "cpu", con_temp=True)
+        sec = self._seccion(cont, "Placa de video (GPU)", "")
+        detalle(sec, m.gpu_nombre)
+        medidor(sec, "gpu", con_temp=True)
+        sec = self._seccion(cont, "Memoria RAM", "")
+        medidor(sec, "ram")
+
+        # Los discos se agregan en la primera lectura (Windows necesita dos muestras para informarlos)
+        self._rend_sec_discos = self._seccion(cont, "Discos de almacenamiento", "")
+        self._rend_discos = {}
+
+        def agregar_disco(d):
+            caja = ctk.CTkFrame(self._rend_sec_discos, fg_color="transparent")
+            caja.pack(fill="x", pady=(0 if not self._rend_discos else 18, 0))
+            letras = ", ".join(f"{l}:" for l in d["letras"]) or "sin letra"
+            detalle(caja, f"{d['modelo']}  ·  {letras}")
+            medidor(caja, f"disco{d['numero']}")
+            espacio = ctk.CTkLabel(caja, text="", font=fuente(12), text_color=P["SECUNDARIO"], anchor="w")
+            espacio.pack(anchor="w", pady=(6, 0))
+            self._rend_discos[d["numero"]] = espacio
+        self._rend_agregar_disco = agregar_disco
+
+        sec = self._seccion(cont, "¿Qué significan los colores?", "")
+        for clave, texto, expl in rendimiento.NIVELES_TEXTO:
+            f = ctk.CTkFrame(sec, fg_color="transparent")
+            f.pack(anchor="w", pady=2)
+            ctk.CTkLabel(f, text="", width=14, height=14, corner_radius=7,
+                         fg_color=rendimiento.COLORES[clave]).pack(side="left", padx=(0, 10))
+            ctk.CTkLabel(f, text=f"{texto}: {expl.lower()}.", font=fuente(12),
+                         text_color=P["TEXTO"]).pack(side="left")
+        ctk.CTkLabel(sec, text="La temperatura usa los mismos colores: fresca, templada o caliente. Que esté en "
+                               "alto consumo o caliente un rato (por ejemplo, jugando) es normal; solo conviene "
+                               "revisar si se queda así sin estar haciendo nada.",
+                     font=fuente(12), text_color=P["SECUNDARIO"], wraplength=640, justify="left").pack(
+            anchor="w", pady=(8, 0))
+        ctk.CTkLabel(sec, text="La temperatura del procesador Windows no la informa en la mayoría de las PC: "
+                               "para leerla haría falta instalar un driver con permisos de administrador, y la app "
+                               "no lo hace para no tocar el sistema.",
+                     font=fuente(12), text_color=P["SECUNDARIO"], wraplength=640, justify="left").pack(
+            anchor="w", pady=(6, 0))
+
+    def _tic_rendimiento(self) -> None:
+        """Lee y pinta solo mientras la página está a la vista (si no, no consume nada)."""
+        import rendimiento
+        if self.vista != "rendimiento" or not self.winfo_viewable() or "rendimiento" not in self._paginas:
+            self._rend_activo = False
+            return
+        try:
+            datos = self._medidor.leer()
+            for d in datos["discos"]:
+                if d["numero"] not in self._rend_discos:
+                    self._rend_agregar_disco(d)
+                datos[f"disco{d['numero']}"] = d["actividad"]
+                lbl = self._rend_discos.get(d["numero"])
+                if lbl is not None and d["total"]:
+                    usado = d["total"] - d["libre"]
+                    poco = d["libre"] / d["total"] < 0.1
+                    lbl.configure(text=f"Espacio: {usado:.0f} de {d['total']:.0f} GB ocupados · quedan "
+                                       f"{d['libre']:.0f} GB libres ({100 * d['libre'] / d['total']:.0f} %)"
+                                       + ("  · casi lleno" if poco else ""),
+                                  text_color=P["PELIGRO_TEXTO"] if poco else P["SECUNDARIO"])
+            for clave, (num, pastilla, expl, barra, temp) in self._rend.items():
+                v = datos.get(clave)
+                que = "disco" if clave.startswith("disco") else clave
+                if v is None:
+                    num.configure(text="–")
+                    pastilla.configure(text="  No disponible  ", fg_color=P["SUPERFICIE"], text_color=P["SECUNDARIO"])
+                    expl.configure(text="Windows no informa este dato.")
+                    barra.set(0)
+                else:
+                    nv, texto, ex = rendimiento.nivel(v, que)
+                    color = rendimiento.COLORES[nv]
+                    num.configure(text=f"{v:.0f} %")
+                    pastilla.configure(text=f"  {texto}  ", fg_color=color, text_color="#1b1b1f")
+                    if clave == "ram":
+                        ex = f"{ex} · {datos['ram_usada']:.1f} de {datos['ram_total']:.1f} GB en uso"
+                    elif clave == "cpu" and datos.get("cpu_ghz"):
+                        ex = f"{ex} · {datos['cpu_ghz']:.2f} GHz ahora"
+                    elif clave == "gpu" and datos.get("vram_total"):
+                        ex = f"{ex} · memoria de video: {datos['vram_usada']:.1f} de {datos['vram_total']:.0f} GB"
+                    expl.configure(text=ex)
+                    barra.configure(progress_color=color)
+                    barra.set(v / 100)
+                if temp is not None:
+                    t = datos.get(f"{clave}_temp")
+                    if t is None:
+                        temp.configure(text="  Temperatura: no disponible  ", fg_color=P["SUPERFICIE"],
+                                       text_color=P["SECUNDARIO"])
+                    else:
+                        nt, tt = rendimiento.nivel_temp(t, clave)
+                        temp.configure(text=f"  {t:.0f} °C · {tt}  ", fg_color=rendimiento.COLORES[nt],
+                                       text_color="#1b1b1f")
+        except Exception as e:      # noqa: BLE001
+            print(f"Rendimiento: {e!r}")
+        self.after(1000, self._tic_rendimiento)
+
     def ver_acerca(self) -> None:
         self._registrar(("acerca", None))
         self.vista = "acerca"

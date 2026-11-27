@@ -13,7 +13,7 @@ import winreg
 
 NOMBRE = "Brahttery hub"
 ID = "BrahtteryHub"                       # clave de registro, mutex y clase de ventana
-VERSION = "1.4.6"                         # súbela antes de publicar una actualización
+VERSION = "2.0.0"                         # súbela antes de publicar una actualización
 # Repositorio de GitHub donde se publican las versiones ("usuario/repositorio").
 # Vacío = la app no busca actualizaciones.
 REPO_ACTUALIZACIONES = "Brah912/brahttery-hub"

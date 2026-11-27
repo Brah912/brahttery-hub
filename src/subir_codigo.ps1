@@ -19,7 +19,7 @@ if (-not $Mensaje) { $Mensaje = "Código fuente de la versión $version" }
 $ARCHIVOS = @(
     "Brahttery hub.pyw", "actualizador.py", "apariencia.py", "bandeja.py", "crear_icono.py", "diagnostico.py",
     "dispositivos.py", "estimacion.py", "hid_estandar.py", "manifiesto.py", "modelos.py", "prototipos_icono.py",
-    "rutas.py", "selector_color.py", "ventana.py", "sonidos.py", "notificaciones.py",
+    "rutas.py", "selector_color.py", "ventana.py", "sonidos.py", "notificaciones.py", "rendimiento.py", "polling.py",
     "brahttery_hub.ico", "brahttery_hub.png", "brahttery_hub_gris.ico", "brahttery_hub_gris.png",
     "brahttery_hub_oscuro.ico", "brahttery_hub_oscuro.png",
     "compilar.ps1", "publicar.ps1", "subir_readme.ps1", "subir_codigo.ps1", "instalador.iss",

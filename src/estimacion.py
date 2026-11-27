@@ -29,6 +29,8 @@ import math
 import os
 import time
 
+import polling
+
 import rutas
 
 RUTA_HISTORIAL = rutas.RUTA_HISTORIAL
@@ -36,7 +38,7 @@ RUTA_HISTORIAL = rutas.RUTA_HISTORIAL
 # Autonomía con batería llena, en horas (valores orientativos)
 AUTONOMIA_NOMINAL = {
     "hyperx-cloud3": 120,   # HyperX: hasta 120 h
-    "scyrox": 60,           # ratón 2.4 GHz a alta tasa de sondeo
+    "scyrox": 80,           # SCYROX V8: ~80 h a 1000 Hz (TechPowerUp; la marca no publica cifra)
     "dualsense": 8,
     "mando": 40,            # mando Xbox con pilas AA
     "auriculares": 6,
@@ -52,9 +54,10 @@ MODELOS_CONOCIDOS = (
     ("superlight-2", 95),       # Logitech PRO X SUPERLIGHT 2: hasta 95 h
     ("superlight", 70),         # Logitech PRO X SUPERLIGHT: hasta 70 h
     ("g305", 250),              # Logitech G305: hasta 250 h
+    ("scyrox", 80),             # SCYROX V8: ~80 h a 1000 Hz (TechPowerUp; la marca no publica cifra)
 )
 SUBIDA_CARGA = 10               # una subida de 10 puntos o más sin "cargando" = se cargó
-PESO_NOMINAL = 3                # horas de uso que "vale" la autonomía oficial frente a lo medido
+PESO_NOMINAL = 10               # horas de uso que "vale" la autonomía oficial frente a lo medido
 MAX_HUECO = 1800                    # s entre lecturas que cuentan como uso: los ratones duermen a los pocos
                                     # segundos quietos y no responden, pero la sesión de uso sigue
 DIAS_HISTORIAL = 30                 # descargas que se tienen en cuenta
@@ -93,6 +96,9 @@ class Estimador:
         self.datos = datos
         self.disp: dict[str, dict] = datos.setdefault("disp", {})
         self.perfiles: dict[str, dict] = datos.setdefault("perfiles", {})
+        if datos.get("perfiles_v") != 2:      # 2.0.0: los perfiles viejos contaban doble la descarga en curso
+            datos["perfiles_v"] = 2
+            datos["analizado"] = 0
 
     def recargar_si_cambio(self) -> None:
         """Para la ventana: lee lo nuevo que haya escrito la bandeja."""
@@ -114,9 +120,13 @@ class Estimador:
             pass
 
     # ------------------------------------------------------------- registrar
-    def registrar(self, clave: str, nivel: int, cargando: bool, ahora: float | None = None) -> None:
-        """Una lectura real del dispositivo (no se llama para los que están en reposo)."""
+    def registrar(self, clave: str, nivel: int, cargando: bool, ahora: float | None = None,
+                  hz: int | None = None) -> None:
+        """Una lectura real del dispositivo (no se llama para los que están en reposo).
+        hz: polling rate del ratón en ese momento (se guarda en cada punto para que el consumo
+        medido se pueda pasar a "consumo a 1000 Hz" y luego ajustarse a la tasa actual)."""
         ahora = time.time() if ahora is None else ahora
+        punto = [ahora, nivel, 0] + ([hz] if hz else [])
         d = self.disp.setdefault(clave, {"tramos": [], "ultimo": 0, "uso": 0})
         tramos = d["tramos"]
         hueco = ahora - (d.get("ultimo") or 0)
@@ -137,10 +147,12 @@ class Estimador:
                     tramos.append([])
                 else:
                     tramos[-1] = []
-                tramos[-1].append([ahora, nivel, d["uso"]])
+                punto[2] = d["uso"]
+                tramos[-1].append(punto)
                 cambio = True
             elif nivel < ultimo:                        # bajó: nuevo punto
-                actual.append([ahora, nivel, d["uso"]])
+                punto[2] = d["uso"]
+                actual.append(punto)
                 del actual[:-1000]
                 cambio = True
             # subidas pequeñas: vaivén del sensor (sobre todo si mide voltaje), se ignoran
@@ -169,6 +181,10 @@ class Estimador:
         sxx = sum((x - mx) ** 2 for x in xs)
         pendiente = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx else 0.0
         por_hora = -pendiente if pendiente < 0 else caida / (uso / 3600)
+        # Se guarda como consumo a 1000 Hz: si el tramo se midió a 8000 Hz, gastaba ~5 veces más.
+        factores = [polling.factor(p[3]) for p in tramo if len(p) > 3]
+        if factores:
+            por_hora /= sum(factores) / len(factores)
         return por_hora, uso / 3600
 
     def analizar(self, ahora: float | None = None) -> None:
@@ -177,7 +193,10 @@ class Estimador:
         for clave, d in self.disp.items():
             suma = peso_total = horas = 0.0
             n = 0
-            for tramo in d.get("tramos", []):
+            tramos = d.get("tramos", [])
+            for i, tramo in enumerate(tramos):
+                if i == len(tramos) - 1 and not d.get("cargando"):
+                    continue        # la descarga en curso la suma consumo() aparte (si no, contaba doble)
                 c = self._consumo_tramo(tramo)
                 if not c:
                     continue
@@ -191,6 +210,8 @@ class Estimador:
             if peso_total > 0:
                 self.perfiles[clave] = {"por_hora": round(suma / peso_total, 4), "horas": round(horas, 2),
                                         "descargas": n, "fecha": ahora}
+            else:
+                self.perfiles.pop(clave, None)
         self.datos["analizado"] = ahora
         self._guardar()
 
@@ -213,10 +234,16 @@ class Estimador:
             return perfil["por_hora"], perfil["horas"]
         return actual
 
-    def horas(self, clave: str, tipo: str, nivel: int, total: float | None = None) -> tuple[float, bool]:
-        """Devuelve (horas de uso restantes, medido_de_verdad). `total` fija la autonomía nominal."""
-        total = total or self.autonomia_nominal(clave, tipo)
+    def horas(self, clave: str, tipo: str, nivel: int, total: float | None = None,
+              hz: int | None = None) -> tuple[float, bool]:
+        """Devuelve (horas de uso restantes, medido_de_verdad). `total` fija la autonomía nominal.
+        hz: polling rate actual. El consumo medido y la autonomía oficial son a 1000 Hz (así
+        publican las marcas): se ajustan a la tasa actual (8000 Hz ≈ 5 veces más consumo)."""
+        f = polling.factor(hz)
+        total = (total or self.autonomia_nominal(clave, tipo)) / f
         c = self.consumo(clave)
+        if c:
+            c = (c[0] * f, c[1])
         if c and c[0] > 0:
             # Con pocas horas medidas, la medida se mezcla con la autonomía oficial/típica (cuenta
             # como PESO_NOMINAL horas de uso): así una racha rara al principio no da cifras absurdas.
